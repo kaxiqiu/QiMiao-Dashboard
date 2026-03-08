@@ -5,9 +5,9 @@ from datetime import datetime
 
 # --- 1. 配置中心 (大叔请填入您的两个专属链接) ---
 # 填入第一步“发布到网络”拿到的那个 CSV 链接
-READ_URL = "这里填入您发布的CSV链接" 
+READ_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTaLJQbQAIk0Vp5PRD7U1JDyturObEh7PCdVTUiFKikO6BaqVoZIRIwzxYxHnvPBPa_yCHy5ErNm2xE/pub?gid=0&single=true&output=csv" 
 # 填入您之前在“App 脚本”部署拿到的那个 Web 应用 URL
-SCRIPT_URL = "这里填入您的脚本URL" 
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwwbgupWtmk2yNwVs1DIyfsQe84ZZnvfC-LMly8caYaYos-o5Tqz8-V7kDCtGbbqs1g/exec" 
 
 st.set_page_config(page_title="指挥部完全体", page_icon="🤺", layout="centered")
 
