@@ -1,170 +1,117 @@
 import streamlit as st
 import pandas as pd
-import json
-import os
 from datetime import datetime
+from streamlit_gsheets import GSheetsConnection
 
-# --- 1. 基础配置与数据持久化 ---
-st.set_page_config(page_title="奇妙的自管-数字化指挥部", layout="wide")
+# --- 1. 基础配置 ---
+st.set_page_config(page_title="奇妙训练指挥部", page_icon="🤺", layout="centered")
 
-# 数据文件路径（保存在当前文件夹）
-DATA_FILE = "qimiao_data.json"
+# --- 2. 建立实时连接 (ttl=0 解决“数据不出”的关键) ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {
-        "rewards": [
-            {"name": "没有玩游戏", "points": 20},
-            {"name": "10:30 前睡觉", "points": 10},
-            {"name": "做了一件之前做不到的事", "points": 5},
-            {"name": "训练/比赛后拉伸", "points": 2},
-            {"name": "如厕没看手机", "points": 2},
-            {"name": "仔细复盘比赛", "points": 2},
-            {"name": "看书 100 页", "points": 1},
-            {"name": "完成 1 项作业", "points": 1}
-        ],
-        "today_logs": [],
-        "health_data": {"weight": "", "heart_rate": "", "burned": "", "intake": ""},
-        "last_reset": datetime.now().strftime("%Y-%m-%d")
-    }
+def load_full_data():
+    # 强制不使用缓存，每次刷新都去抓云端最新的
+    df = conn.read(ttl=0)
+    # 清理表头可能的空格
+    df.columns = [c.strip() for c in df.columns]
+    return df
 
-def save_data():
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(st.session_state.store, f, ensure_ascii=False, indent=4)
+# --- 3. 初始化 Session (实现实时计分和撤销) ---
+if "today_score" not in st.session_state:
+    st.session_state.today_score = 0
+if "today_logs" not in st.session_state:
+    st.session_state.today_logs = []
 
-# 初始化 Session State
-if 'store' not in st.session_state:
-    st.session_state.store = load_data()
+# --- 4. 奖金逻辑 (完全对齐 App) ---
+def get_reward_info(score):
+    if score >= 100: return "🏆 最好的糖糖", 200.0
+    if score >= 90:  return "🌟 出色的糖糖", 88.88
+    if score >= 60:  return "✅ 合格的糖糖", 10.0
+    return "💪 加油呀", 0.0
 
-# --- 2. 核心逻辑函数 ---
-def calculate_status(score):
-    if score >= 100: return "最好的糖糖", 200.0
-    if score >= 95: return "完美的糖糖", 100.0
-    if score >= 90: return "出色的糖糖", 88.88
-    if score >= 80: return "优秀的糖糖", 66.66
-    if score >= 70: return "进阶的糖糖", 20.0
-    if score >= 60: return "合格的糖糖", 10.0
-    return "加油呀", 0.0
+# --- 5. 顶部实时看板 ---
+status_text, money = get_reward_info(st.session_state.today_score)
 
-def add_entry(name, points):
-    entry = {
-        "id": datetime.now().timestamp(),
-        "时间": datetime.now().strftime("%H:%M:%S"),
-        "任务": name,
-        "得分": points
-    }
-    st.session_state.store["today_logs"].insert(0, entry)
-    save_data()
+st.title("🤺 训练数字化指挥部")
+m1, m2 = st.columns(2)
+m1.metric("今日积分", f"{st.session_state.today_score} Pts")
+m2.metric("当前奖金", f"¥{money}")
+st.write(f"**评价：** {status_text}")
 
-# --- 3. 侧边栏：身体数据管理 ---
-with st.sidebar:
-    st.title("📊 身体数据")
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    st.info(f"今天是：{date_str}")
-    
-    # 获取现有数据
-    h = st.session_state.store["health_data"]
-    weight = st.text_input("体重 (kg)", value=h.get("weight", ""))
-    hr = st.text_input("静心心率 (bpm)", value=h.get("heart_rate", ""))
-    burned = st.text_input("运动消耗 (kcal)", value=h.get("burned", ""))
-    intake = st.text_input("摄入热量 (kcal)", value=h.get("intake", ""))
-    
-    if st.button("💾 保存身体数据"):
-        st.session_state.store["health_data"] = {
-            "weight": weight, "heart_rate": hr, "burned": burned, "intake": intake
-        }
-        save_data()
-        st.success("身体数据已存档！")
-        
-    st.divider()
-    st.subheader("⚙️ 任务清单管理")
-    new_task_name = st.text_input("新增固定任务名")
-    new_task_pts = st.number_input("设定分值", value=1)
-    if st.button("➕ 加入固定清单"):
-        if new_task_name:
-            st.session_state.store["rewards"].append({"name": new_task_name, "points": new_task_pts})
-            save_data()
+# --- 6. 核心：打卡任务区 ---
+st.divider()
+st.subheader("🎯 任务快速打卡")
+tasks = {
+    "没有玩游戏": 20, "10:30前睡觉": 10, 
+    "完成作业": 5, "复盘比赛": 2, 
+    "如厕不看手机": 2, "训练拉伸": 2
+}
+
+cols = st.columns(2)
+for i, (name, pts) in enumerate(tasks.items()):
+    btn_col = cols[i % 2]
+    if btn_col.button(f"{name} +{pts}", use_container_width=True):
+        st.session_state.today_score += pts
+        st.session_state.today_logs.append({"项目": name, "分值": pts, "时间": datetime.now().strftime("%H:%M")})
+        st.rerun()
+
+# --- 7. 今日明细与管理 ---
+if st.session_state.today_logs:
+    with st.expander("📝 查看今日已录明细", expanded=True):
+        st.table(pd.DataFrame(st.session_state.today_logs))
+        c1, c2 = st.columns(2)
+        if c1.button("🔙 撤销上一条", use_container_width=True):
+            last = st.session_state.today_logs.pop()
+            st.session_state.today_score -= last['分值']
+            st.rerun()
+        if c2.button("🗑️ 清空今日记录", use_container_width=True):
+            st.session_state.today_score = 0
+            st.session_state.today_logs = []
             st.rerun()
 
-# --- 4. 主界面：仪表盘 ---
-st.title("🛡️ 奇妙的自管 - 数字化指挥部")
-
-# 计算总分
-today_total = sum(item['得分'] for item in st.session_state.store["today_logs"])
-status_name, money = calculate_status(today_total)
-
-# 顶部三张卡片
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("今日累计总分", f"{today_total} 分")
-with col2:
-    st.metric("当前状态评估", status_name)
-with col3:
-    st.metric("预计今日奖金", f"¥ {money}")
-
+# --- 8. 身体数据与同步 ---
 st.divider()
+st.subheader("🩺 身体数据录入")
+cw, ch = st.columns(2)
+weight_val = cw.text_input("体重 (kg)", placeholder="55.5")
+heart_val = ch.text_input("心率 (bpm)", placeholder="60")
 
-# --- 5. 核心功能区：左右分栏 ---
-left_col, right_col = st.columns([2, 1])
-
-with left_col:
-    st.subheader("✅ 日常任务（点击加分）")
-    # 动态生成按钮布局
-    reward_cols = st.columns(3)
-    for idx, r in enumerate(st.session_state.store["rewards"]):
-        with reward_cols[idx % 3]:
-            if st.button(f"{r['name']} +{r['points']}", key=f"btn_{idx}", use_container_width=True):
-                add_entry(r['name'], r['points'])
-                st.rerun()
-    
-    st.divider()
-    st.subheader("📝 自定义补录")
-    c1, c2, c3 = st.columns([2, 1, 1])
-    with c1:
-        custom_name = st.text_input("任务名称", placeholder="比如：洗车、帮邻居...", key="custom_n")
-    with c2:
-        custom_pts = st.number_input("分值", value=5, key="custom_p")
-    with c3:
-        st.write(" ") # 对齐
-        if st.button("快速存入", use_container_width=True):
-            if custom_name:
-                add_entry(custom_name, custom_pts)
-                st.rerun()
-
-with right_col:
-    st.subheader("📱 手机时间结算")
-    phone_mins = st.number_input("今日使用分钟", value=120, step=10)
-    if st.button("一键结算手机分", use_container_width=True):
-        earned = 20 + ((120 - phone_mins) // 10) * 2
-        add_entry(f"手机结算 ({phone_mins}min)", earned)
-        st.rerun()
-    
-    st.divider()
-    st.subheader("🕒 最近记录")
-    if st.session_state.store["today_logs"]:
-        # 显示最近的5条记录
-        recent_df = pd.DataFrame(st.session_state.store["today_logs"]).head(10)
-        st.dataframe(recent_df[["时间", "任务", "得分"]], hide_index=True)
-        if st.button("⚠️ 撤销最近一条"):
-            if st.session_state.store["today_logs"]:
-                st.session_state.store["today_logs"].pop(0)
-                save_data()
-                st.rerun()
+if st.button("🚀 确认并同步到云端表格", type="primary", use_container_width=True):
+    if st.session_state.today_score > 0:
+        # ⚠️ 这里必须匹配您之前导出 CSV 的列名 ⚠️
+        new_row = {
+            "日期": datetime.now().strftime("%Y-%m-%d"),
+            "得分": st.session_state.today_score,
+            "奖金": money,
+            "体重": weight_val,
+            "心率": heart_val
+        }
+        try:
+            old_df = load_full_data()
+            updated_df = pd.concat([old_df, pd.DataFrame([new_row])], ignore_index=True)
+            conn.update(data=updated_df)
+            st.balloons()
+            st.success("🎉 数据已成功同步到云端！")
+            st.session_state.today_score = 0
+            st.session_state.today_logs = []
+        except Exception as e:
+            st.error(f"同步失败: {e}")
     else:
-        st.info("暂无记录")
+        st.warning("请先打卡后再提交。")
 
-# --- 6. 底部数据看板 ---
+# --- 9. 历史归档预览 (直接显示，解决数据看不见的问题) ---
 st.divider()
-with st.expander("📊 查看今日完整明细"):
-    if st.session_state.store["today_logs"]:
-        full_df = pd.DataFrame(st.session_state.store["today_logs"])
-        st.table(full_df[["时间", "任务", "得分"]])
+st.subheader("📊 历史记录预览")
+try:
+    history_df = load_full_data()
+    if not history_df.empty:
+        # 按照日期倒序排列，让最新的在最上面
+        st.dataframe(
+            history_df.sort_values(by="日期", ascending=False), 
+            use_container_width=True,
+            hide_index=True
+        )
     else:
-        st.write("还没有数据哦~")
-
-if st.button("🗑️ 清空今日数据 (谨慎!)"):
-    st.session_state.store["today_logs"] = []
-    save_data()
-    st.rerun()
+        st.info("目前的云端表格没有数据。")
+except:
+    st.warning("连接表格失败，请检查 Google Sheets 权限或表头是否包含：日期,得分,奖金,体重,心率")
