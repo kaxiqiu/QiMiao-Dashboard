@@ -2,15 +2,20 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 
-# --- 1. 配置 ---
-st.set_page_config(page_title="指挥部完全体", layout="centered")
-# 这里填入您刚才在 Google 脚本里拿到的那个 Web 应用 URL
-SCRIPT_URL = "这里填入您复制的URL" 
+# --- 1. 配置中心 (大叔请填入您的两个专属链接) ---
+# 填入第一步“发布到网络”拿到的那个 CSV 链接
+READ_URL = "这里填入您发布的CSV链接" 
+# 填入您之前在“App 脚本”部署拿到的那个 Web 应用 URL
+SCRIPT_URL = "这里填入您的脚本URL" 
 
-# --- 2. 样式与逻辑 (保持和 App 一致) ---
-st.markdown("""<style>.main-score { font-size: 80px; font-weight: 900; text-align: center; }</style>""", unsafe_allow_html=True)
+st.set_page_config(page_title="指挥部完全体", page_icon="🤺", layout="centered")
+
+# --- 2. 样式与状态初始化 ---
+st.markdown("""<style>.main-score { font-size: 80px; font-weight: 900; text-align: center; color: #333; }</style>""", unsafe_allow_html=True)
+
+if "score" not in st.session_state: st.session_state.score = 0
+if "details" not in st.session_state: st.session_state.details = []
 
 def calculate_status(score):
     if score >= 100: return "🏆 完美状态", 200.0
@@ -18,21 +23,23 @@ def calculate_status(score):
     if score >= 60: return "✅ 合格状态", 10.0
     return "💪 加油呀", 0.0
 
-if "score" not in st.session_state: st.session_state.score = 0
-if "details" not in st.session_state: st.session_state.details = []
-
 # --- 3. 侧边栏 ---
 with st.sidebar:
-    selected_date = st.date_input("补录日期", datetime.now())
-    st.info("读取数据依然使用公开链接，写入数据使用脚本。")
+    st.title("⚙️ 管理面板")
+    selected_date = st.date_input("记录日期", datetime.now())
+    if st.button("🔄 刷新历史数据"):
+        st.cache_data.clear()
+        st.rerun()
 
 # --- 4. 主看板 ---
 status, money = calculate_status(st.session_state.score)
-st.markdown(f'<p style="text-align:center;color:red;font-weight:bold;">{status}</p>', unsafe_allow_html=True)
+st.markdown(f'<p style="text-align:center;color:#FF4B4B;font-weight:bold;font-size:20px;">{status}</p>', unsafe_allow_html=True)
 st.markdown(f'<p class="main-score">{st.session_state.score}</p>', unsafe_allow_html=True)
+st.markdown(f'<p style="text-align:center;background:#F0F2F6;padding:10px;border-radius:10px;">今日奖金：¥{money}</p>', unsafe_allow_html=True)
 
 # --- 5. 任务打卡 (大按钮) ---
-tasks = {"没有玩游戏": 20, "10:30前睡觉": 10, "实战复盘": 5, "如厕不看手机": 2}
+st.divider()
+tasks = {"没有玩游戏": 20, "10:30前睡觉": 10, "实战复盘": 5, "作业/阅读": 5, "如厕不看手机": 2}
 cols = st.columns(2)
 for i, (name, p) in enumerate(tasks.items()):
     if cols[i%2].button(f"{name} +{p}", use_container_width=True):
@@ -40,42 +47,47 @@ for i, (name, p) in enumerate(tasks.items()):
         st.session_state.details.append(name)
         st.rerun()
 
+# 撤销按钮
+if st.session_state.details:
+    if st.button("🔙 撤销上一条", use_container_width=True):
+        last = st.session_state.details.pop()
+        st.session_state.score -= tasks.get(last, 0)
+        st.rerun()
+
 # --- 6. 身体数据 ---
 st.divider()
 cw, ch = st.columns(2)
-w_in = cw.text_input("体重 (kg)")
-h_in = ch.text_input("心率 (bpm)")
+weight = cw.text_input("体重 (kg)", placeholder="55.0")
+heart = ch.text_input("心率 (bpm)", placeholder="65")
 
-# --- 7. 🚀 核心同步逻辑 (不再需要 Service Account) ---
+# --- 7. 同步逻辑 (通过脚本写入) ---
 if st.button("🚀 确认并同步到表格", type="primary", use_container_width=True):
-    if st.session_state.score >= 0:
-        # 构造要发送的数据
-        payload = {
-            "日期": selected_date.strftime("%Y-%m-%d"),
-            "项目明细": " | ".join(st.session_state.details),
-            "项目分值": st.session_state.score,
-            "当日总分": st.session_state.score,
-            "当日奖金": money,
-            "体重": w_in,
-            "心率": h_in
-        }
-        
-        try:
-            # 像发短信一样把数据发给 Google 脚本
-            response = requests.post(SCRIPT_URL, json=payload)
-            if response.text == "OK":
-                st.balloons()
-                st.success("同步成功！数据已存入表格。")
-                st.session_state.score = 0
-                st.session_state.details = []
-            else:
-                st.error("同步失败，请检查脚本 URL。")
-        except Exception as e:
-            st.error(f"连接错误: {e}")
+    payload = {
+        "日期": selected_date.strftime("%Y-%m-%d"),
+        "项目明细": " | ".join(st.session_state.details) if st.session_state.details else "无记录",
+        "项目分值": st.session_state.score,
+        "当日总分": st.session_state.score,
+        "当日奖金": money,
+        "体重": weight,
+        "心率": heart
+    }
+    try:
+        # 发送数据
+        response = requests.post(SCRIPT_URL, json=payload, timeout=10)
+        st.balloons()
+        st.success("同步成功！数据已飞往云端表格。")
+        st.session_state.score = 0
+        st.session_state.details = []
+    except Exception as e:
+        st.error(f"同步失败，请检查脚本URL: {e}")
 
-# --- 8. 历史预览 (依然使用只读连接) ---
+# --- 8. 历史记录 (直接读取 CSV，不再报错) ---
 st.divider()
-conn = st.connection("gsheets", type=GSheetsConnection)
-df = conn.read(ttl=0)
-if not df.empty:
-    st.dataframe(df.sort_values("日期", ascending=False), use_container_width=True, hide_index=True)
+st.subheader("📊 历史记录明细")
+try:
+    # 强制加上缓存控制，防止读取旧数据
+    history_df = pd.read_csv(READ_URL)
+    if not history_df.empty:
+        st.dataframe(history_df.sort_values(by="日期", ascending=False), use_container_width=True, hide_index=True)
+except:
+    st.info("暂时还没看到历史数据，快去同步第一条吧！")
