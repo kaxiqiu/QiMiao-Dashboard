@@ -1,70 +1,92 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 
-# --- 1. 基础配置 ---
-st.set_page_config(page_title="奇妙训练指挥部", page_icon="🤺", layout="centered")
+# 1. 页面配置
+st.set_page_config(page_title="指挥部云端版", layout="centered")
+st.title("🤺 训练指挥部 (云端版)")
 
-# --- 2. 建立实时连接 (ttl=0 解决“数据不出”的关键) ---
+# 2. 建立连接 (获取实时数据)
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def load_full_data():
-    # 强制不使用缓存，每次刷新都去抓云端最新的
-    df = conn.read(ttl=0)
-    # 清理表头可能的空格
-    df.columns = [c.strip() for c in df.columns]
-    return df
-
-# --- 3. 初始化 Session (实现实时计分和撤销) ---
-if "today_score" not in st.session_state:
-    st.session_state.today_score = 0
-if "today_logs" not in st.session_state:
-    st.session_state.today_logs = []
-
-# --- 4. 奖金逻辑 (完全对齐 App) ---
-def get_reward_info(score):
-    if score >= 100: return "🏆 最好的糖糖", 200.0
-    if score >= 90:  return "🌟 出色的糖糖", 88.88
-    if score >= 60:  return "✅ 合格的糖糖", 10.0
+# 3. 奖金计算逻辑
+def get_reward(score):
+    if score >= 100: return "🏆 完美状态", 200.0
+    if score >= 90:  return "🌟 出色状态", 88.88
+    if score >= 60:  return "✅ 合格状态", 10.0
     return "💪 加油呀", 0.0
 
-# --- 5. 顶部实时看板 ---
-status_text, money = get_reward_info(st.session_state.today_score)
+# 4. 初始化 SessionState (实现实时点击)
+if "score" not in st.session_state: st.session_state.score = 0
+if "details" not in st.session_state: st.session_state.details = []
 
-st.title("🤺 训练数字化指挥部")
-m1, m2 = st.columns(2)
-m1.metric("今日积分", f"{st.session_state.today_score} Pts")
-m2.metric("当前奖金", f"¥{money}")
-st.write(f"**评价：** {status_text}")
+status, money = get_reward(st.session_state.score)
 
-# --- 6. 核心：打卡任务区 ---
+# 5. 顶部看板
+c1, c2 = st.columns(2)
+c1.metric("今日总分", f"{st.session_state.score} Pts")
+c2.metric("预计奖金", f"¥{money}")
+st.info(f"状态评价：{status}")
+
+# 6. 任务打卡区
 st.divider()
-st.subheader("🎯 任务快速打卡")
-tasks = {
-    "没有玩游戏": 20, "10:30前睡觉": 10, 
-    "完成作业": 5, "复盘比赛": 2, 
-    "如厕不看手机": 2, "训练拉伸": 2
-}
-
+st.subheader("🎯 任务选择")
+tasks = {"没有玩游戏": 20, "10:30前睡觉": 10, "完成作业": 5, "如厕不看手机": 2, "拉伸/复盘": 2}
 cols = st.columns(2)
-for i, (name, pts) in enumerate(tasks.items()):
-    btn_col = cols[i % 2]
-    if btn_col.button(f"{name} +{pts}", use_container_width=True):
-        st.session_state.today_score += pts
-        st.session_state.today_logs.append({"项目": name, "分值": pts, "时间": datetime.now().strftime("%H:%M")})
+for i, (name, p) in enumerate(tasks.items()):
+    if cols[i%2].button(f"{name} +{p}", use_container_width=True):
+        st.session_state.score += p
+        st.session_state.details.append(name)
         st.rerun()
 
-# --- 7. 今日明细与管理 ---
-if st.session_state.today_logs:
-    with st.expander("📝 查看今日已录明细", expanded=True):
-        st.table(pd.DataFrame(st.session_state.today_logs))
-        c1, c2 = st.columns(2)
-        if c1.button("🔙 撤销上一条", use_container_width=True):
-            last = st.session_state.today_logs.pop()
-            st.session_state.today_score -= last['分值']
-            st.rerun()
-        if c2.button("🗑️ 清空今日记录", use_container_width=True):
+# 7. 撤销按钮
+if st.session_state.details:
+    if st.button("🔙 撤销上一条", type="secondary"):
+        last_item = st.session_state.details.pop()
+        st.session_state.score -= tasks.get(last_item, 0)
+        st.rerun()
+
+# 8. 身体数据输入
+st.divider()
+st.subheader("🩺 身体数据")
+col_w, col_h = st.columns(2)
+w_in = col_w.text_input("体重 (kg)", placeholder="例: 55.5")
+h_in = col_h.text_input("心率 (bpm)", placeholder="例: 65")
+
+# 9. 同步到 Google 表格
+if st.button("🚀 确认并同步到云端表格", type="primary", use_container_width=True):
+    if st.session_state.score > 0:
+        # 获取旧数据
+        df_old = conn.read(ttl=0)
+        # 构造符合您表头的新行
+        new_row = pd.DataFrame([{
+            "日期": datetime.now().strftime("%Y-%m-%d"),
+            "项目明细": " | ".join(st.session_state.details),
+            "项目分值": st.session_state.score,
+            "当日总分": st.session_state.score,
+            "当日奖金": money,
+            "体重": w_in,
+            "心率": h_in
+        }])
+        # 合并并上传
+        df_updated = pd.concat([df_old, new_row], ignore_index=True)
+        conn.update(data=df_updated)
+        
+        st.balloons()
+        st.success("同步成功！")
+        # 重置今日
+        st.session_state.score = 0
+        st.session_state.details = []
+    else:
+        st.warning("请先打卡记分。")
+
+# 10. 历史预览
+st.divider()
+st.subheader("📊 历史记录查询")
+df_view = conn.read(ttl=0)
+if not df_view.empty:
+    st.dataframe(df_view.sort_values("日期", ascending=False), use_container_width=True, hide_index=True)        if c2.button("🗑️ 清空今日记录", use_container_width=True):
             st.session_state.today_score = 0
             st.session_state.today_logs = []
             st.rerun()
