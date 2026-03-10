@@ -7,82 +7,56 @@ from datetime import datetime
 READ_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTaLJQbQAIk0Vp5PRD7U1JDyturObEh7PCdVTUiFKikO6BaqVoZIRIwzxYxHnvPBPa_yCHy5ErNm2xE/pub?gid=0&single=true&output=csv"
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwwbgupWtmk2yNwVs1DIyfsQe84ZZnvfC-LMly8caYaYos-o5Tqz8-V7kDCtGbbqs1g/exec"
 
-# --- 2. 暴力破解布局 CSS (专门针对手机端窄屏优化) ---
+# --- 2. 深度定制 iOS 样式 ---
 st.set_page_config(page_title="训练指挥部", page_icon="🤺", layout="centered", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
-    /* 1. 屏蔽侧边栏和报错字符 */
+    /* 屏蔽冗余 */
     [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], span[data-testid="stIconMaterial"] { display: none !important; }
     [data-testid="stAppViewContainer"] { background-color: #F2F2F7; }
+    * { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif !important; }
     
-    /* 2. 强制中控台大方框样式 */
+    /* 看板大方框：强制内部所有内容居中 */
     [data-testid="stElementContainer"] > div[data-style-border="true"] {
         background-color: white !important;
         border: none !important;
         border-radius: 20px !important;
         box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
-        padding: 15px 10px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important; /* 核心：垂直居中 */
+        padding: 20px 15px !important;
+        text-align: center !important;
+        display: block !important;
     }
 
-    /* 3. 积分居中修正 */
-    .score-container { width: 100%; text-align: center; }
-    .score-val { font-size: 80px; font-weight: 800; color: #000; line-height: 1; margin: 5px 0; display: block; }
-    .status-badge { font-size: 16px; color: #FF9500; font-weight: 700; margin-bottom: 5px; }
-    .money-label { font-size: 14px; color: #FF3B30; font-weight: 600; background: #FFF1F0; padding: 6px 12px; border-radius: 10px; margin-bottom: 15px; }
-
-    /* 4. 暴力锁定：强制 4 列按钮并排，绝不换行 */
-    [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important; /* 禁止换行 */
-        width: 100% !important;
-        gap: 3px !important; /* 按钮间距极小化 */
-        justify-content: space-between !important;
-    }
-    [data-testid="column"] {
-        width: 24% !important; /* 每列固定 24% 宽度 */
-        flex: 1 1 0% !important;
-        min-width: 0px !important; /* 强制取消最小宽度限制 */
-    }
-
-    /* 5. 按钮极致微调 */
+    /* 积分居中：暴力破解 */
+    .score-center { width: 100%; text-align: center; display: block; }
+    .score-val { font-size: 85px; font-weight: 800; color: #000; line-height: 1; margin: 15px 0; text-align: center; }
+    .status-badge { font-size: 16px; color: #FF9500; font-weight: 700; text-align: center; }
+    .date-text { font-size: 14px; color: #8E8E93; font-weight: 400; }
+    .money-label { font-size: 15px; color: #FF3B30; font-weight: 600; background: #FFF1F0; padding: 8px 15px; border-radius: 12px; display: inline-block; margin-bottom: 20px; }
+    
+    /* 按钮样式：确保两列布局不溢出 */
     .stButton > button, .stPopover > button {
-        width: 100% !important;
-        min-width: 0px !important;
-        padding: 8px 0px !important;
-        font-size: 11px !important; /* 极小字号防挤出 */
-        border-radius: 10px !important;
-        background-color: #F2F2F7 !important;
-        border: none !important;
-        font-weight: 600 !important;
+        width: 100% !important; border-radius: 12px !important; border: none !important;
+        background-color: #F2F2F7 !important; color: #000 !important; padding: 10px 0 !important;
+        font-weight: 600 !important; font-size: 14px !important;
     }
     
-    /* 打卡清单左对齐 */
-    .task-list-btn button { text-align: left !important; padding: 12px 15px !important; background-color: white !important; font-size: 14px !important; }
+    /* 列表按钮左对齐 */
+    .task-list-btn button { text-align: left !important; padding: 12px 15px !important; background-color: white !important; box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important; font-size: 15px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. 逻辑函数与数据初始化 ---
-def calculate_status(score):
-    if score >= 100: return "🏆 最好的状态", 200.0
-    if score >= 90: return "🌟 出色的状态", 88.88
-    if score >= 60: return "✅ 合格的状态", 10.0
-    return "💪 加油呀", 0.0
-
+# --- 3. 初始化 ---
 if "score" not in st.session_state: st.session_state.score = 0
 if "details" not in st.session_state: st.session_state.details = []
 if "undo_stack" not in st.session_state: st.session_state.undo_stack = []
 if "tasks" not in st.session_state:
     st.session_state.tasks = [{"name": "没有玩游戏", "points": 20}, {"name": "10:30前睡觉", "points": 10}, {"name": "阅读/作业", "points": 5}, {"name": "实战复盘", "points": 5}, {"name": "如厕不看手机", "points": 2}]
 
-# --- 4. 顶部统计 (天数与累计) ---
+# --- 4. 顶部统计 ---
 try:
-    df_raw = pd.read_csv(READ_URL)
-    df_raw['日期'] = pd.to_datetime(df_raw['日期']).dt.date
+    df_raw = pd.read_csv(READ_URL); df_raw['日期'] = pd.to_datetime(df_raw['日期']).dt.date
     lifetime_money = df_raw.groupby('日期')['当日奖金'].first().sum()
     completed_days = len(df_raw['日期'].unique()) + 1
 except:
@@ -90,55 +64,41 @@ except:
 
 st.markdown(f"""
 <div style="background: white; padding: 15px; border-radius: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 12px; display: flex; justify-content: space-between;">
-    <div><span style="font-size:11px; color:#8E8E93;">已坚持记录</span><br><span style="font-size:17px; color:#34C759; font-weight:700;">第 {completed_days} 天</span></div>
-    <div style="text-align: right;"><span style="font-size:11px; color:#8E8E93;">总累计奖金</span><br><span style="font-size:17px; color:#FF3B30; font-weight:700;">¥{lifetime_money:.2f}</span></div>
+    <div><span style="font-size:12px; color:#8E8E93;">已坚持记录</span><br><span style="font-size:18px; color:#34C759; font-weight:700;">第 {completed_days} 天</span></div>
+    <div style="text-align: right;"><span style="font-size:12px; color:#8E8E93;">总累计奖金</span><br><span style="font-size:18px; color:#FF3B30; font-weight:700;">¥{lifetime_money:.2f}</span></div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 🚀 5. 中控台 (全集成、真居中、真横排) ---
-today_label = datetime.now().strftime("%Y-%m-%d")
-status_str, reward_val = calculate_status(st.session_state.score)
+# --- 🚀 5. 核心看板 (保留 撤销/设置) ---
+today_str = datetime.now().strftime("%Y-%m-%d")
+status_str, reward_val = (lambda s: ("🏆 最好的状态", 200.0) if s >= 100 else ("🌟 出色的状态", 88.88) if s >= 90 else ("✅ 合格的状态", 10.0) if s >= 60 else ("💪 加油呀", 0.0))(st.session_state.score)
 
 with st.container(border=True):
-    # 强制居中的分看板
-    st.markdown(f"""
-        <div class="score-container">
-            <div class="status-badge">{status_str} <span style="font-weight:400; color:#8E8E93;">| {today_label}</span></div>
-            <div class="score-val">{st.session_state.score}</div>
-            <div class="money-label">预计奖金：¥{reward_val:.2f}</div>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f'<div class="status-badge">{status_str} <span class="date-text">| {today_str}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="score-val">{st.session_state.score}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="money-label">预计奖金：¥{reward_val:.2f}</div>', unsafe_allow_html=True)
     
-    # 四个按钮强行并列
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        if st.button("🔙撤销"):
+    # 看板内的两个高频按钮 (撤销、设置)
+    c_undo, c_set = st.columns(2)
+    with c_undo:
+        if st.button("🔙 撤销"):
             if st.session_state.undo_stack:
                 last = st.session_state.undo_stack.pop()
                 st.session_state.score, st.session_state.details = last["score"], last["logs"]; st.rerun()
-    with c2:
-        with st.popover("📅补录"):
-            rec_date = st.date_input("日期", datetime.now(), label_visibility="collapsed")
-    with c3:
-        if st.button("🧹清除"):
-            st.session_state.score = 0; st.session_state.details = []; st.session_state.undo_stack = []; st.rerun()
-    with c4:
-        with st.popover("⚙️设置"):
-            n_name = st.text_input("任务名")
+    with c_set:
+        with st.popover("⚙️ 设置"):
+            n_name = st.text_input("任务名称")
             n_pts = st.number_input("积分", min_value=0, value=5)
-            is_daily = st.checkbox("存入日常", value=True)
-            if st.button("🚀确认"):
+            is_daily = st.checkbox("存入日常任务清单", value=True)
+            if st.button("🚀 确认添加"):
                 if n_name:
                     st.session_state.undo_stack.append({"score": st.session_state.score, "logs": st.session_state.details.copy()})
-                    st.session_state.score += n_pts
-                    st.session_state.details.append(f"{n_name}(+{n_pts})")
+                    st.session_state.score += n_pts; st.session_state.details.append(f"{n_name}(+{n_pts})")
                     if is_daily: st.session_state.tasks.append({"name": n_name, "points": n_pts})
                     st.rerun()
 
-if 'rec_date' not in locals(): rec_date = datetime.now()
-
-# --- 6. 手机时长结算 ---
-st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 15px 5px 5px;">📱 手机时长结算 (120min基准)</p>', unsafe_allow_html=True)
+# --- 6. 📱 手机时间结算 ---
+st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 15px 5px 5px;">📱 手机时长 (120min基准)</p>', unsafe_allow_html=True)
 with st.container(border=True):
     p_min = st.number_input("分钟", min_value=0, value=120, step=5, label_visibility="collapsed")
     p_pts = 20 + ((120 - p_min) // 5)
@@ -148,7 +108,7 @@ with st.container(border=True):
         st.session_state.score += p_pts; st.session_state.details.append(f"手机结算({p_min}min): {p_pts}分"); st.rerun()
 
 # --- 7. 打卡任务清单 ---
-st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 15px 5px 5px;">🎯 日常任务打卡</p>', unsafe_allow_html=True)
+st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 15px 5px 5px;">🎯 任务清单</p>', unsafe_allow_html=True)
 for i, task in enumerate(st.session_state.tasks):
     st.markdown('<div class="task-list-btn">', unsafe_allow_html=True)
     if st.button(f" {task['name']} 　　　　　　　　　　　　　 +{task['points']}", key=f"t_{i}"):
@@ -156,7 +116,19 @@ for i, task in enumerate(st.session_state.tasks):
         st.session_state.score += task['points']; st.session_state.details.append(f"{task['name']}(+{task['points']})"); st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 8. 同步与结算 ---
+# --- 🚀 8. 核心优化：补录与清除移至清单下方 ---
+st.markdown('<p style="font-weight: 600; color: #8E8E93; margin-top: 15px; margin-left: 5px;">🛠️ 数据管理</p>', unsafe_allow_html=True)
+c_log, c_clear = st.columns(2)
+with c_log:
+    with st.popover("📅 补录记录"):
+        rec_date = st.date_input("选择补录日期", datetime.now())
+if 'rec_date' not in locals(): rec_date = datetime.now()
+
+with c_clear:
+    if st.button("🧹 清除今日"):
+        st.session_state.score = 0; st.session_state.details = []; st.session_state.undo_stack = []; st.rerun()
+
+# --- 9. 同步结算 ---
 st.markdown("<br>", unsafe_allow_html=True)
 if st.button("🚀 确认结算并同步到云端", type="primary"):
     d_str = rec_date.strftime("%Y-%m-%d")
@@ -174,7 +146,7 @@ if st.button("🚀 确认结算并同步到云端", type="primary"):
     try:
         with st.spinner('同步中...'):
             for item in payloads: requests.post(SCRIPT_URL, json=item, timeout=10)
-        st.balloons(); st.success("已存档！记录清零。"); st.session_state.score = 0; st.session_state.details = []; st.session_state.undo_stack = []; st.cache_data.clear(); st.rerun()
+        st.balloons(); st.success("存档成功！记录已重置。"); st.session_state.score = 0; st.session_state.details = []; st.session_state.undo_stack = []; st.cache_data.clear(); st.rerun()
     except Exception as e: st.error(f"同步失败: {e}")
 
 with st.expander("📊 查看历史明细"):
