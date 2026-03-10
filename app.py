@@ -7,7 +7,7 @@ from datetime import datetime
 READ_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTaLJQbQAIk0Vp5PRD7U1JDyturObEh7PCdVTUiFKikO6BaqVoZIRIwzxYxHnvPBPa_yCHy5ErNm2xE/pub?gid=0&single=true&output=csv"
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwwbgupWtmk2yNwVs1DIyfsQe84ZZnvfC-LMly8caYaYos-o5Tqz8-V7kDCtGbbqs1g/exec"
 
-# --- 2. 深度定制 CSS (硬核锁定两列) ---
+# --- 2. 深度定制 CSS (极紧凑布局) ---
 st.set_page_config(page_title="训练指挥部", page_icon="🤺", layout="centered", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -17,48 +17,60 @@ st.markdown("""
     [data-testid="stAppViewContainer"] { background-color: #F2F2F7; }
     * { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif !important; }
     
-    /* 1. 暴力破解：锁定所有 st.columns 为横向排列，绝不垂直堆叠 */
+    /* 1. 强力锁定：两列布局极窄间距 */
     [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
-        flex-wrap: nowrap !important; /* 核心：禁止换行 */
-        gap: 10px !important;
+        flex-wrap: nowrap !important;
+        gap: 3px !important; /* 极小间距，防止推挤 */
         width: 100% !important;
+        justify-content: center !important;
     }
     [data-testid="column"] {
-        flex: 1 1 0% !important; /* 核心：平分宽度 */
-        min-width: 0px !important; /* 核心：取消最小宽度限制 */
+        flex: 1 1 0% !important;
+        min-width: 0px !important;
+        padding-left: 0px !important;
+        padding-right: 0px !important;
     }
 
-    /* 2. 看板卡片美化 */
+    /* 2. 看板卡片：全屏宽度适配 */
     [data-testid="stElementContainer"] > div[data-style-border="true"] {
         background-color: white !important;
         border: none !important;
-        border-radius: 20px !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
-        padding: 20px 10px !important;
-        margin-bottom: 12px !important;
+        border-radius: 18px !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+        padding: 15px 8px !important;
+        margin-bottom: 10px !important;
     }
 
-    /* 3. 积分与文字强制居中 */
+    /* 3. 强制内容居中 */
     .stMarkdown, .stMarkdown div { text-align: center !important; }
-    .score-val { font-size: 85px !important; font-weight: 800; color: #000; line-height: 1; margin: 10px 0; display: block; width: 100%; text-align: center; }
-    .status-badge { font-size: 16px; color: #FF9500; font-weight: 700; display: block; margin-bottom: 5px; }
-    .money-label { font-size: 15px; color: #FF3B30; font-weight: 600; background: #FFF1F0; padding: 8px 15px; border-radius: 12px; display: inline-block; margin-bottom: 15px; }
+    .score-val { font-size: 80px !important; font-weight: 800; color: #000; line-height: 1; margin: 5px 0; display: block; width: 100%; text-align: center; }
+    .status-badge { font-size: 15px; color: #FF9500; font-weight: 700; display: block; }
+    .money-label { font-size: 14px; color: #FF3B30; font-weight: 600; background: #FFF1F0; padding: 6px 12px; border-radius: 10px; display: inline-block; margin-bottom: 15px; }
     
-    /* 4. 按钮样式 */
+    /* 4. 按钮极致缩减：确保不撑破屏幕 */
     .stButton > button, .stPopover > button {
-        width: 100% !important; border-radius: 12px !important; border: none !important;
-        background-color: #F2F2F7 !important; color: #000 !important; padding: 10px 0 !important;
-        font-weight: 600 !important; font-size: 14px !important;
+        width: 100% !important; 
+        border-radius: 10px !important; 
+        border: none !important;
+        background-color: #F2F2F7 !important; 
+        color: #000 !important; 
+        padding: 8px 0px !important;
+        font-weight: 600 !important; 
+        font-size: 13px !important;
+        box-shadow: none !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     
-    /* 5. 任务列表左对齐 (特殊处理) */
-    .task-list-btn button { text-align: left !important; padding: 12px 15px !important; background-color: white !important; box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important; font-size: 15px !important; }
+    /* 任务列表列表感 */
+    .task-list-btn button { text-align: left !important; padding: 12px 15px !important; background-color: white !important; font-size: 14px !important; box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. 逻辑函数 ---
+# --- 3. 核心计算 ---
 def calculate_status(score):
     if score >= 100: return "🏆 最好的状态", 200.0
     if score >= 90: return "🌟 出色的状态", 88.88
@@ -80,13 +92,13 @@ except:
     lifetime_money = 0.0; completed_days = 1
 
 st.markdown(f"""
-<div style="background: white; padding: 15px; border-radius: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 12px; display: flex; justify-content: space-between;">
-    <div><span style="font-size:11px; color:#8E8E93;">已坚持记录</span><br><span style="font-size:18px; color:#34C759; font-weight:700;">第 {completed_days} 天</span></div>
-    <div style="text-align: right;"><span style="font-size:11px; color:#8E8E93;">总累计奖金</span><br><span style="font-size:18px; color:#FF3B30; font-weight:700;">¥{lifetime_money:.2f}</span></div>
+<div style="background: white; padding: 12px; border-radius: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 10px; display: flex; justify-content: space-between;">
+    <div><span style="font-size:11px; color:#8E8E93;">已坚持记录</span><br><span style="font-size:16px; color:#34C759; font-weight:700;">第 {completed_days} 天</span></div>
+    <div style="text-align: right;"><span style="font-size:11px; color:#8E8E93;">总累计奖金</span><br><span style="font-size:16px; color:#FF3B30; font-weight:700;">¥{lifetime_money:.2f}</span></div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 🚀 5. 核心看板 (撤销与设置 强制并排) ---
+# --- 🚀 5. 核心看板 (撤销/设置 并排) ---
 today_str = datetime.now().strftime("%Y-%m-%d")
 status_str, reward_val = calculate_status(st.session_state.score)
 
@@ -95,10 +107,10 @@ with st.container(border=True):
     st.markdown(f'<span class="score-val">{st.session_state.score}</span>', unsafe_allow_html=True)
     st.markdown(f'<div class="money-label">预计奖金：¥{reward_val:.2f}</div>', unsafe_allow_html=True)
     
-    # 强制两列布局
+    # 强制两列横向对齐
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("🔙 撤销", key="undo"):
+        if st.button("🔙 撤销"):
             if st.session_state.undo_stack:
                 last = st.session_state.undo_stack.pop()
                 st.session_state.score, st.session_state.details = last["score"], last["logs"]; st.rerun()
@@ -114,18 +126,18 @@ with st.container(border=True):
                     if is_daily: st.session_state.tasks.append({"name": n_name, "points": n_pts})
                     st.rerun()
 
-# --- 6. 📱 手机时长结算 ---
-st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 15px 5px 5px; text-align: left;">📱 手机时长 (120min基准)</p>', unsafe_allow_html=True)
+# --- 6. 📱 手机时间结算 ---
+st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 15px 5px 5px;">📱 手机时长 (120min基准)</p>', unsafe_allow_html=True)
 with st.container(border=True):
     p_min = st.number_input("分钟", min_value=0, value=120, step=5, label_visibility="collapsed")
     p_pts = 20 + ((120 - p_min) // 5)
-    st.markdown(f"<div style='text-align:center; font-size:14px; margin-bottom:10px;'>💡 结算积分：<b>{p_pts}</b> 分</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:center; font-size:14px; margin-bottom:5px;'>结算积分：<b>{p_pts}</b> 分</div>", unsafe_allow_html=True)
     if st.button("确认记录手机得分", key="p_btn"):
         st.session_state.undo_stack.append({"score": st.session_state.score, "logs": st.session_state.details.copy()})
         st.session_state.score += p_pts; st.session_state.details.append(f"手机结算({p_min}min): {p_pts}分"); st.rerun()
 
-# --- 7. 打卡任务清单 ---
-st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 15px 5px 5px; text-align: left;">🎯 任务清单</p>', unsafe_allow_html=True)
+# --- 7. 打卡清单 ---
+st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 15px 5px 5px;">🎯 日常任务清单</p>', unsafe_allow_html=True)
 for i, task in enumerate(st.session_state.tasks):
     st.markdown('<div class="task-list-btn">', unsafe_allow_html=True)
     if st.button(f" {task['name']} 　　　　　　　　　　　　　 +{task['points']}", key=f"t_{i}"):
@@ -133,16 +145,16 @@ for i, task in enumerate(st.session_state.tasks):
         st.session_state.score += task['points']; st.session_state.details.append(f"{task['name']}(+{task['points']})"); st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 🚀 8. 数据管理 (补录与清除 强制并排) ---
-st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 20px 5px 5px; text-align: left;">🛠️ 数据管理</p>', unsafe_allow_html=True)
-c_log, c_clear = st.columns(2)
-with c_log:
+# --- 🚀 8. 数据管理 (补录记录与清除今日 并排) ---
+st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 15px 5px 5px;">🛠️ 数据管理</p>', unsafe_allow_html=True)
+cl1, cl2 = st.columns(2)
+with cl1:
     with st.popover("📅 补录记录"):
-        rec_date = st.date_input("补录日期", datetime.now())
+        rec_date = st.date_input("日期", datetime.now())
 if 'rec_date' not in locals(): rec_date = datetime.now()
 
-with c_clear:
-    if st.button("🧹 清除今日", key="clear_all"):
+with cl2:
+    if st.button("🧹 清除今日"):
         st.session_state.score = 0; st.session_state.details = []; st.session_state.undo_stack = []; st.rerun()
 
 # --- 9. 同步结算 ---
@@ -163,10 +175,10 @@ if st.button("🚀 确认结算并同步到云端", type="primary"):
     try:
         with st.spinner('同步中...'):
             for item in payloads: requests.post(SCRIPT_URL, json=item, timeout=10)
-        st.balloons(); st.success("存档成功！记录已重置。"); st.session_state.score = 0; st.session_state.details = []; st.session_state.undo_stack = []; st.cache_data.clear(); st.rerun()
+        st.balloons(); st.success("已存档！"); st.session_state.score = 0; st.session_state.details = []; st.session_state.undo_stack = []; st.cache_data.clear(); st.rerun()
     except Exception as e: st.error(f"同步失败: {e}")
 
 with st.expander("📊 查看历史明细"):
     try:
         df_v = pd.read_csv(READ_URL); st.dataframe(df_v.sort_values(by="日期", ascending=False), use_container_width=True, hide_index=True)
-    except: st.info("历史载入中...")
+    except: st.info("历史记录载入中...")
