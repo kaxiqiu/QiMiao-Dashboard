@@ -43,20 +43,28 @@ st.markdown("""
         font-weight: 500;
         box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
-    /* 撤销小按钮专用 */
+    /* 撤销小按钮：极简图标风 */
     .undo-btn button {
-        padding: 2px 10px !important;
-        font-size: 12px !important;
-        background-color: #E5E5EA !important;
+        padding: 0px 5px !important;
+        font-size: 18px !important;
+        background-color: transparent !important;
         width: auto !important;
         float: right;
+        box-shadow: none !important;
+        border: none !important;
     }
     /* 任务列表左对齐 */
     .task-list-btn button { text-align: left !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. 初始化状态 ---
+# --- 3. 核心计算与状态初始化 ---
+def calculate_status(score):
+    if score >= 100: return "🏆 最好的状态", 200.0
+    if score >= 90: return "🌟 出色的状态", 88.88
+    if score >= 60: return "✅ 合格的状态", 10.0
+    return "💪 加油呀", 0.0
+
 if "score" not in st.session_state: st.session_state.score = 0
 if "details" not in st.session_state: st.session_state.details = []
 if "undo_stack" not in st.session_state: st.session_state.undo_stack = []
@@ -69,7 +77,7 @@ if "tasks" not in st.session_state:
         {"name": "如厕不看手机", "points": 2}
     ]
 
-# --- 4. 顶部统计 ---
+# --- 4. 顶部：坚持天数与累计奖金 ---
 try:
     df_raw = pd.read_csv(READ_URL)
     df_raw['日期'] = pd.to_datetime(df_raw['日期']).dt.date
@@ -87,8 +95,8 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. 计分看板 ---
-status_str, reward_val = (calculate_status := lambda s: ("🏆 最好的状态", 200.0) if s >= 100 else ("🌟 出色的状态", 88.88) if s >= 90 else ("✅ 合格的状态", 10.0) if s >= 60 else ("💪 加油呀", 0.0))(st.session_state.score)
+# --- 5. 核心：计分看板 ---
+status_str, reward_val = calculate_status(st.session_state.score)
 st.markdown(f"""
 <div class="ios-card" style="text-align: center;">
     <div class="status-badge">{status_str}</div>
@@ -97,11 +105,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 🚀 6. 核心变动：手机结算移至最前 ---
+# --- 🚀 6. 核心优化：手机时间结算 (排在首位) ---
 st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 10px 5px;">📱 手机时间结算 (120min基准)</p>', unsafe_allow_html=True)
 with st.container():
     st.markdown('<div class="ios-card">', unsafe_allow_html=True)
-    p_min = st.number_input("输入分钟", min_value=0, value=120, step=5, label_visibility="collapsed")
+    p_min = st.number_input("分钟", min_value=0, value=120, step=5, label_visibility="collapsed")
     p_pts = 20 + ((120 - p_min) // 5)
     st.write(f"💡 结算积 **{p_pts}** 分")
     if st.button("确认记录手机得分", key="p_btn"):
@@ -111,13 +119,13 @@ with st.container():
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 🚀 7. 核心变动：撤销按钮移至标题行旁边 ---
-head_col, undo_col = st.columns([4, 1.2])
-with head_col:
+# --- 🚀 7. 核心优化：撤销图标对齐任务清单标题 ---
+title_col, undo_col = st.columns([5, 1])
+with title_col:
     st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 10px 5px;">🎯 日常打卡清单</p>', unsafe_allow_html=True)
 with undo_col:
     st.markdown('<div class="undo-btn">', unsafe_allow_html=True)
-    if st.button("🔙 撤销", disabled=not st.session_state.undo_stack):
+    if st.button("🔙", disabled=not st.session_state.undo_stack, help="撤销上一条记录"):
         last = st.session_state.undo_stack.pop()
         st.session_state.score, st.session_state.details = last["score"], last["logs"]
         st.rerun()
@@ -136,32 +144,45 @@ for i, task in enumerate(st.session_state.tasks):
 st.markdown('<p style="font-weight: 600; color: #8E8E93; margin: 20px 5px 10px;">🩺 身体数据</p>', unsafe_allow_html=True)
 with st.container():
     st.markdown('<div class="ios-card">', unsafe_allow_html=True)
-    c_w, c_h = st.columns(2)
-    weight = c_w.text_input("体重", placeholder="kg")
-    heart = c_h.text_input("心率", placeholder="bpm")
+    cw, ch = st.columns(2)
+    weight = cw.text_input("体重", placeholder="kg")
+    heart = ch.text_input("心率", placeholder="bpm")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 9. 底部管理区 ---
+# --- 🚀 9. 核心优化：新增任务增加“存入日常”选项 ---
 st.divider()
+st.markdown('<p style="font-weight: 600; color: #8E8E93; margin-bottom:10px;">🛠️ 指挥部管理</p>', unsafe_allow_html=True)
 col_log, col_set = st.columns(2)
+
 with col_log:
     with st.popover("📅 补录数据"):
-        record_date = st.date_input("选择日期", datetime.now())
-if 'record_date' not in locals(): record_date = datetime.now()
+        rec_date = st.date_input("选择日期", datetime.now(), label_visibility="collapsed")
+if 'rec_date' not in locals(): rec_date = datetime.now()
 
 with col_set:
     with st.popover("⚙️ 新增任务"):
-        n_name = st.text_input("任务名")
-        n_pts = st.number_input("积分", min_value=0, value=5)
-        if st.button("➕ 添加"):
+        n_name = st.text_input("任务名称", placeholder="如：体能训练")
+        n_pts = st.number_input("积分奖励", min_value=0, value=5)
+        # 🌟 核心开关：是否永久加入清单
+        is_daily = st.checkbox("存入日常任务清单", value=False)
+        
+        if st.button("🚀 确认添加", use_container_width=True):
             if n_name:
-                st.session_state.tasks.append({"name": n_name, "points": n_pts})
+                # 无论如何先记一次分
+                st.session_state.undo_stack.append({"score": st.session_state.score, "logs": st.session_state.details.copy()})
+                st.session_state.score += n_pts
+                st.session_state.details.append(f"{n_name}(+{n_pts})")
+                
+                # 如果选了“存入日常”，则加入任务列表
+                if is_daily:
+                    st.session_state.tasks.append({"name": n_name, "points": n_pts})
+                
                 st.rerun()
 
-# --- 10. 最终同步 ---
+# --- 10. 结算与同步 ---
 st.markdown("<br>", unsafe_allow_html=True)
 if st.button("🚀 确认结算并同步到云端", type="primary"):
-    d_str = record_date.strftime("%Y-%m-%d")
+    d_str = rec_date.strftime("%Y-%m-%d")
     payloads = []
     if not st.session_state.details:
         payloads.append({"日期": d_str, "项目明细": "无记录", "项目分值": 0, "当日总分": st.session_state.score, "当日奖金": reward_val, "体重": weight, "心率": heart})
@@ -182,4 +203,4 @@ with st.expander("📊 查看历史明细"):
     try:
         df_v = pd.read_csv(READ_URL)
         st.dataframe(df_v.sort_values(by="日期", ascending=False), use_container_width=True, hide_index=True)
-    except: st.info("历史记录载入中...")
+    except: st.info("历史载入中...")
